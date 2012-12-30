@@ -4,99 +4,40 @@ class Channel_select_ft extends EE_Fieldtype
 {
     public $info = array(
         'name' => 'Channel Select',
-        'version' => '1.0.0'
+        'version' => '1.0.0',
     );
 
     public $has_array_data = TRUE;
-    
+
+    public function __construct()
+    {
+        parent::__construct();
+
+        $this->EE->load->add_package_path(PATH_THIRD.'channel_select/');
+
+        $this->EE->load->model('channel_select_model');
+    }
+
     /**
-     * Display Field on Publish
+     * Display channel entry field
      *
-     * @access  public
-     * @param   $data
-     * @return  field html
+     * @param   $data the entry data
+     * @return  string
      *
      */
-    public function display_field($data, $cell = FALSE)
+    public function display_field($data)
     {
-        static $options;
-        
-        if (is_null($options))
-        {
-            $this->EE->load->library('javascript');
-            
-            $this->EE->cp->add_to_head('<script type="text/javascript" src="'.URL_THIRD_THEMES.'channel_select/select2/select2.min.js"></script>');
-            $this->EE->cp->add_to_head('<link rel="stylesheet" media="all" href="'.URL_THIRD_THEMES.'channel_select/select2/select2.css">');
-            $this->EE->cp->add_to_head('
-            <style type="text/css">
-            input.select2-input {
-                -webkit-box-sizing: content-box;
-                -moz-box-sizing: content-box;
-                -o-box-sizing: content-box;
-                box-sizing: content-box;
-            }
-            ul.select2-choices.ui-sortable li {
-                cursor: move !important;
-            }
-            </style>
-            ');
-            
-            $this->EE->javascript->output('
-                $(".channel-select").select2({
-                    minimumResultsForSearch: 12
-                });
-            ');
-            
-            $options = array();
-            
-            foreach ($this->channels() as $channel)
-            {
-                $options[$channel['channel_id']] = $channel['channel_title'];
-            }
-        }
-        
-        if ( ! $options)
-        {
-            return lang('no_channels');
-        }
-
-        $field_name = $cell ? $this->cell_name : $this->field_name;
-
-        if ( ! empty($this->settings['channel_select_multiple']))
-        {
-            $data = $data ? explode('|', $data) : array();
-
-            return form_multiselect($field_name.'[]', $options, $data, 'class="channel-select" style="width:100%;"');
-        }
-
-        return form_dropdown($field_name, $options, $data, 'class="channel-select" style="width:100%;"');
+        return $this->EE->channel_select_model->display_field($data, $this->field_name);
     }
 
-    private function channels()
-    {
-        static $cache;
-
-        if ( ! is_null($cache))
-        {
-            return $cache;
-        }
-
-        $query = $this->EE->db->where('site_id', $this->EE->config->item('site_id'))
-                                ->order_by('channel_title', 'asc')
-                                ->get('channels');
-
-        $cache = array();
-
-        foreach ($query->result_array() as $row)
-        {
-            $cache[$row['channel_id']] = $row;
-        }
-
-        $query->free_result();
-
-        return $cache;
-    }
-    
+    /**
+     * Save
+     *
+     * format the data for the database by pipe delimiting
+     *
+     * @param $data a channel ID or an array of channel IDs
+     * @return string
+     */
     public function save($data)
     {
         if ( ! is_array($data))
@@ -107,6 +48,14 @@ class Channel_select_ft extends EE_Fieldtype
         return $data ? implode('|', $data) : '';
     }
 
+    /**
+     * Pre Process
+     *
+     * convert the pipe delimited string into an array of channel IDs
+     *
+     * @param $data channel ids
+     * @return array
+     */
     public function pre_process($data)
     {
         return $data ? explode('|', $data) : array();
@@ -114,33 +63,30 @@ class Channel_select_ft extends EE_Fieldtype
     
     /**
      * Replace tag
+     * 
+     * returns pipe deliimted string of channel ids if single variable
+     * displays channel info if tag pair
      *
-     * @access  public
-     * @param   field contents
-     * @return  replacement text
-     *
+     * @param $data array of channel ids
+     * @param $params tag params array
+     * @param $tagdata the tagdata string
+     * @return string
      */
     public function replace_tag($data, $params = array(), $tagdata = FALSE)
     {
+        if ($tagdata && isset($params['entries']) && $params['entries'] === 'yes')
+        {
+            return $this->replace_entries($data, $params, $tagdata);
+        }
+
         if ( ! $tagdata)
         {
             //convert back to pipe delimited, it's an array now because of pre_process
             return $this->save($data);
         }
 
-        $channels = $this->channels();
-
-        $variables = array();
-
-        foreach ($data as $channel_id)
-        {
-            if ( ! isset($channels[$channel_id]))
-            {
-                continue;
-            }
-
-            array_push($variables, $channels[$channel_id]);
-        }
+        //the model gives an array keyed by channel id, parse_variables wants a zero-indexed array
+        $variables = array_values($this->EE->channel_select_model->get_channels($data));
 
         if (empty($variables))
         {
@@ -150,150 +96,246 @@ class Channel_select_ft extends EE_Fieldtype
         return $this->EE->TMPL->parse_variables($tagdata, $variables);
     }
 
-    public function replace_name($data, $params = array(), $tagdata = FALSE)
+    /**
+     * Replace Name
+     *
+     * display the first channel name in a set of channel ids
+     *
+     * @param array $data
+     * @param array $params
+     * @param bool|string $tagdata
+     * @return string
+     */
+    public function replace_name($data, $params = array(), $tagdata = false)
     {
-        return $this->replace_names($data, $params, $data);
+        $channel_id = array_shift($data);
+
+        $channels = $this->EE->channel_select_model->get_channels();
+
+        return $this->EE->channel_select_model->get_channel_info($channel_id, 'channel_name');
     }
 
-    public function replace_names($data, $params = array(), $tagdata = FALSE)
+    /**
+     * Replace Names
+     *
+     * a pipe delimited list of channel names
+     *
+     * @param array $data
+     * @param array $params
+     * @param bool|string $tagdata
+     * @return string
+     */
+    public function replace_names($data, $params = array(), $tagdata = false)
     {
-        $channels = $this->channels();
+        $channels = $this->EE->channel_select_model->get_channels($data);
 
-        $result = '';
+        $names = array();
 
-        foreach ($data as $channel_id)
+        foreach ($channels as $channel_id => $channels)
         {
-            if ( ! isset($channels[$channel_id]))
-            {
-                continue;
-            }
-
-            $result .= $result ? '|'.$channels[$channel_id]['channel_name'] : $channels[$channel_id]['channel_name'];
+            $names[] = $channels[$channel_id]['channel_name'];
         }
 
-        return $result;
+        return implode('|', $names);
     }
 
-    public function replace_titles($data, $params = array(), $tagdata = FALSE)
+    /**
+     * Replates Titles
+     * 
+     * a pipe delimited list of channel titles
+     * 
+     * @param $data
+     * @param array $params
+     * @param bool $tagdata
+     * @return string
+     */
+    public function replace_titles($data, $params = array(), $tagdata = false)
     {
-        $channels = $this->channels();
-
-        $result = '';
+        $channels = $this->EE->channel_select_model->get_channels($data);
 
         $separator = isset($params['separator']) ? $params['separator'] : '|';
 
         $last_separator = isset($params['last_separator']) ? $params['last_separator'] : '|';
 
-        $count = 0;
+        $titles = array();
 
-        $total_results = count($data);
-
-        foreach ($data as $channel_id)
+        foreach ($channels as $channel_id => $channel_info)
         {
-            $count++;
-
-            if ( ! isset($channels[$channel_id]))
-            {
-                continue;
-            }
-
-            $current_separator = $count === $total_results ? $last_separator : $separator;
-
-            $result .= $result ? $current_separator.$channels[$channel_id]['channel_title'] : $channels[$channel_id]['channel_title'];
+            $titles[] = $channel_info['channel_title'];
         }
 
-        return $result;
+        if ( ! $titles)
+        {
+            return '';
+        }
+
+        $last_title = array_pop($titles);
+
+        return implode($separator, $titles).$last_separator.$last_title;
     }
 
-    public function replace_title($data, $params = array(), $tagdata = FALSE)
+    /**
+     * Replate Title
+     * 
+     * display the first channel name in a set of channel ids
+     * 
+     * @param $data
+     * @param array $params
+     * @param bool $tagdata
+     * @return string
+     */
+    public function replace_title($data, $params = array(), $tagdata = false)
     {
-        return $this->replace_titles($data, $params, $data);
+        $channel_id = array_shift($data);
+
+        $channels = $this->EE->channel_select_model->get_channels();
+
+        return $this->EE->channel_select_model->get_channel_info($channel_id, 'channel_name');
     }
 
+    
+    /**
+     * Replace Entries
+     * 
+     * run a channel:entries loop from the fieldtype
+     * 
+     * {your_field_name:entries disable="pagination"} {/your_field_name}
+     *
+     * @param $data
+     * @param array $params
+     * @param bool $tagdata
+     * @return string
+     */
+    public function replace_entries($data, $params = array(), $tagdata = FALSE)
+    {
+        if ( ! $data || ! $tagdata)
+        {
+            return '';
+        }
+
+        require_once APPPATH.'modules/channel/mod.channel.php';
+
+        $original_tagdata = $this->EE->TMPL->tagdata;
+        $original_tagparams = $this->EE->TMPL->tagparams;
+
+        $channels = $this->EE->channel_select_model->get_channels($data);
+
+        $channel_names = array();
+
+        foreach ($channels as $channel)
+        {
+            $channel_names[] = $channel['channel_name'];
+        }
+
+        $this->EE->TMPL->tagdata = $tagdata;
+        $this->EE->TMPL->tagparams = $params;
+        $this->EE->TMPL->tagparams['channel'] = implode('|', $channel_names);
+        $this->EE->TMPL->tagparams['dynamic'] = 'no';
+    
+        $channel = new Channel;
+        
+        $output = $channel->entries();
+
+        $this->EE->TMPL->tagdata = $original_tagdata;
+        $this->EE->TMPL->tagparams = $original_tagparams;
+
+        return $output;
+    }
+
+    /**
+     * Display channel field settings
+     **/
     public function display_settings($data)
     {
-        foreach ($this->_display_settings($data) as $row)
+        foreach ($this->EE->channel_select_model->display_settings($data) as $row)
         {
             $this->EE->table->add_row($row[0], $row[1]);
         }
     }
 
+    /**
+     * Display Matrix cell settings
+     **/
     public function display_cell_settings($data)
     {
-        return $this->_display_settings($data);
+        return $this->EE->channel_select_model->display_settings($data);
     }
 
+    /**
+     * Display Low Variable settings
+     **/
     public function display_var_settings($data)
     {
-        return $this->_display_settings($data);
+        return $this->EE->channel_select_model->display_settings($data);
     }
 
-    protected function _display_settings($data)
-    {
-        $defaults = array(
-            'channel_select_multiple' => 0,
-        );
-        
-        $data = array_merge($defaults, $data);
-        
-        return array(
-            array(
-                form_label('Allow selection of multiple channels?'),
-                form_label(form_checkbox('channel_select_multiple', '1', $data['channel_select_multiple']).' Yes'),
-            ),
-        );
-    }
-
+    /**
+     * Save channel field settings
+     **/
     public function save_settings()
     {
-        return array_merge($this->_save_settings($_POST), array(
+        return array_merge($this->EE->channel_select_model->save_settings($_POST), array(
             'field_fmt' => 'none',
             'field_show_fmt' => 'n',
         ));
     }
 
+    /**
+     * Save Matrix cell settings
+     **/
     public function save_cell_settings($data)
     {
-        return $this->_save_settings($data);
+        return $this->EE->channel_select_model->save_settings($data);
     }
 
+    /**
+     * Save Low Variable settings
+     **/
     public function save_var_settings($data)
     {
-        return $this->_save_settings($data);
+        return $this->EE->channel_select_model->save_settings($data);
     }
 
-    protected function _save_settings($data)
-    {
-        return array(
-            'channel_select_multiple' => empty($data['channel_select_multiple']) ? 0 : 1,
-        );
-    }
-
+    /**
+     * Save Low Variable
+     **/
     public function save_var_field($data)
     {
-        return $this->save($data);
+        return $this->EE->channel_select_model->save($data);
     }
 
+    /**
+     * Save Matrix cell
+     **/
     public function save_cell($data)
     {
-        return $this->save($data);
+        return $this->EE->channel_select_model->save($data);
     }
 
+    /**
+     * Display Low Variable field
+     **/
     public function display_var_field($data)
     {
-        return $this->display_field($data);
+        return $this->EE->channel_select_model->display_field($data, $this->field_name);
     }
 
+    /**
+     * Display Matrix cell field
+     **/
     public function display_cell($data)
     {
-        return $this->display_field($data, TRUE);
+        return $this->EE->channel_select_model->display_field($data, $this->cell_name);
     }
 
-    public function display_var_tag($data, $params = array(), $tagdata = FALSE)
+    /**
+     * Replace Low Variable tag
+     **/
+    public function display_var_tag($data, $params = array(), $tagdata = false)
     {
         return $this->replace_tag($data, $params, $tagdata);
     }
 }
 
-/* End of file ft.google_maps.php */
-/* Location: ./system/expressionengine/third_party/google_maps/ft.google_maps.php */
+/* End of file ft.channel_select.php */
+/* Location: ./system/expressionengine/third_party/channel_select/ft.channel_select.php */
