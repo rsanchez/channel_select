@@ -82,7 +82,7 @@ class Channel_select_model extends CI_Model
      * @param $field_name the field name to use when outputting the form input
      * @return string
      */
-    public function display_field($data, $field_name)
+    public function display_field($data, $field_name, $multiple = FALSE)
     {
         if ( ! $this->session->cache(__CLASS__, __FUNCTION__))
         {
@@ -127,7 +127,7 @@ class Channel_select_model extends CI_Model
 
         $this->load->helper('form');
 
-        if ( ! empty($this->settings['channel_select_multiple']))
+        if ($multiple)
         {
             $data = $data ? explode('|', $data) : array();
 

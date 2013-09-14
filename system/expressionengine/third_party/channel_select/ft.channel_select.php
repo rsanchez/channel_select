@@ -27,7 +27,7 @@ class Channel_select_ft extends EE_Fieldtype
      */
     public function display_field($data)
     {
-        return $this->EE->channel_select_model->display_field($data, $this->field_name);
+        return $this->EE->channel_select_model->display_field($data, $this->field_name, ! empty($this->settings['channel_select_multiple']));
     }
 
     /**
@@ -317,7 +317,7 @@ class Channel_select_ft extends EE_Fieldtype
      **/
     public function display_var_field($data)
     {
-        return $this->EE->channel_select_model->display_field($data, $this->field_name);
+        return $this->EE->channel_select_model->display_field($data, $this->field_name, ! empty($this->settings['channel_select_multiple']));
     }
 
     /**
@@ -325,7 +325,7 @@ class Channel_select_ft extends EE_Fieldtype
      **/
     public function display_cell($data)
     {
-        return $this->EE->channel_select_model->display_field($data, $this->cell_name);
+        return $this->EE->channel_select_model->display_field($data, $this->cell_name, ! empty($this->settings['channel_select_multiple']));
     }
 
     /**
