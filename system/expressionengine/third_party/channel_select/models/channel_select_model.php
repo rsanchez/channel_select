@@ -28,11 +28,6 @@ class Channel_select_model extends CI_Model
         }
     }
 
-    public function set_settings($settings)
-    {
-        $this->settings = $settings;
-    }
-
     /**
      * Get all or some channels from the cache
      * 
@@ -149,9 +144,7 @@ class Channel_select_model extends CI_Model
             return form_multiselect($field_name.'[]', $options, $data, 'class="channel-select" style="width:100%;"');
         }
 
-        $options = array_merge(array('' => '---'), $options);
-
-        return form_dropdown($field_name, $options, $data, 'class="channel-select" style="width:100%;"');
+        return form_dropdown($field_name, array('' => '---') + $options, $data, 'class="channel-select" style="width:100%;"');
     }
 
     /**
