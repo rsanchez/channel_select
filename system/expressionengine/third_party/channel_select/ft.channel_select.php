@@ -266,7 +266,7 @@ class Channel_select_ft extends EE_Fieldtype
      **/
     public function display_var_settings($data)
     {
-        return $this->EE->channel_select_model->display_settings($data);
+        return $this->EE->channel_select_model->display_settings($data, 'variable_settings[channel_select]');
     }
 
     /**

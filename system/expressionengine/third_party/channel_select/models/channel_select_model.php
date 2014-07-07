@@ -153,7 +153,7 @@ class Channel_select_model extends CI_Model
      * @param $data
      * @return array
      */
-    public function display_settings($data)
+    public function display_settings($data, $prefix = NULL)
     {
         $defaults = array(
             'channel_select_multiple' => 0,
@@ -162,11 +162,13 @@ class Channel_select_model extends CI_Model
         $data = array_merge($defaults, $data);
 
         $this->load->helper('form');
-        
+
+        $name = $prefix ? $prefix.'[channel_select_multiple]' : 'channel_select_multiple';
+
         return array(
             array(
                 form_label('Allow selection of multiple channels?'),
-                form_label(form_checkbox('channel_select_multiple', '1', $data['channel_select_multiple']).' Yes'),
+                form_label(form_checkbox($name, '1', $data['channel_select_multiple']).' Yes'),
             ),
         );
     }
